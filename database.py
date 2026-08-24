@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS activities (
     category TEXT,
     activity_date TEXT NOT NULL,
     duration_minutes INTEGER,
+    attachment_path TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -48,16 +49,21 @@ class ActivityDatabase:
     def _init_schema(self):
         with self._connect() as conn:
             conn.executescript(SCHEMA)
+            # Migración: si la DB es de una versión anterior sin attachment_path, se agrega.
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(activities)").fetchall()]
+            if "attachment_path" not in cols:
+                conn.execute("ALTER TABLE activities ADD COLUMN attachment_path TEXT")
 
     def add(self, activity: Activity) -> Activity:
         now = datetime.now().isoformat(timespec="seconds")
         with self._connect() as conn:
             cur = conn.execute(
                 """INSERT INTO activities
-                   (title, description, category, activity_date, duration_minutes, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   (title, description, category, activity_date, duration_minutes, attachment_path, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (activity.title, activity.description, activity.category,
-                 activity.activity_date, activity.duration_minutes, now, now),
+                 activity.activity_date, activity.duration_minutes,
+                 activity.attachment_path, now, now),
             )
             activity.id = cur.lastrowid
             activity.created_at = now
@@ -92,7 +98,8 @@ class ActivityDatabase:
         if not current:
             return None
 
-        allowed = {"title", "description", "category", "activity_date", "duration_minutes"}
+        allowed = {"title", "description", "category", "activity_date",
+                   "duration_minutes", "attachment_path"}
         updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
         if not updates:
             return current

@@ -11,16 +11,20 @@ el modelo de datos sólidos antes de añadir seguridad y sincronización.
 ```
 activity_tracker/
 ├── main.py          # CLI (punto de entrada)
+├── app.py            # Interfaz web Flask (punto de entrada)
 ├── models.py         # Modelo de datos Activity + validaciones
 ├── database.py        # Acceso a SQLite (CRUD)
 ├── config.py          # Rutas y variables de entorno
+├── templates/          # HTML (Jinja2)
+├── static/              # CSS y JS de la interfaz web
+├── uploads/              # Adjuntos subidos (ignorada por git)
 ├── requirements.txt
 ├── .env.example
 ├── .gitignore
 └── data/               # DB local (ignorada por git)
 ```
 
-## Uso
+## Uso — CLI
 
 ```bash
 pip install -r requirements.txt
@@ -32,6 +36,22 @@ python main.py show 1
 python main.py update 1 --duration 60
 python main.py delete 1
 ```
+
+## Uso — Interfaz web
+
+CLI y web comparten la misma base de datos (`database.py`/`models.py`); son
+dos formas de ver y editar los mismos datos.
+
+```bash
+pip install -r requirements.txt
+python app.py
+# abrir http://localhost:5000
+```
+
+Pantalla única "Nueva actividad": título, categoría, fecha, duración,
+descripción y un adjunto opcional (arrastrar y soltar). El panel lateral
+muestra el total de minutos registrados hoy y las últimas actividades.
+Los adjuntos se guardan en `uploads/` (ignorada por git).
 
 ## Próximas fases
 
