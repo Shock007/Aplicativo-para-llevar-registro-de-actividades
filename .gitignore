@@ -1,3 +1,5 @@
-/_pycache_
-/data
+/__pycache__/
+/data/
+/uploads/
+/.venv/
 activities.db
