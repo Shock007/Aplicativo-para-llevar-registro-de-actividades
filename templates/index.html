@@ -1,144 +1,245 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Registro de Actividades</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <meta charset="UTF-8">
+  <title>Registro de Actividades</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
 
-<header class="topbar">
-  <div class="brand">
-    <span class="brand-mark">&#9634;</span>
-    <span class="brand-name">Registro de Actividades</span>
-  </div>
-  <div class="user-chip">
-    <span class="avatar" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="8" r="4"/>
-        <path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/>
-      </svg>
-    </span>
-    <span>Usuario X</span>
-  </div>
-</header>
-
-<main class="layout">
-
-  <section class="panel form-panel">
-    <button type="button" class="panel-header" id="panelToggle" aria-expanded="true" aria-controls="panelBody">
-      <span>Nueva actividad</span>
-      <svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <path d="M6 9l6 6 6-6"/>
-      </svg>
-    </button>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flash-stack">
-          {% for category, message in messages %}
-            <div class="flash flash-{{ category }}">{{ message }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-
-    <form id="panelBody" class="activity-form" method="POST" action="{{ url_for('create_activity') }}" enctype="multipart/form-data">
-
-      <div class="field field-title">
-        <label for="title">Título <span class="required" aria-hidden="true">*</span></label>
-        <input type="text" id="title" name="title" maxlength="150" required
-               placeholder="Ej. Reunión de equipo">
-      </div>
-
-      <div class="field-row">
-        <div class="field">
-          <label for="category">Categoría</label>
-          <select id="category" name="category">
-            <option value="">Sin categoría</option>
-            {% for c in categories %}
-              <option value="{{ c }}">{{ c|capitalize }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="field">
-          <label for="activity_date">Fecha</label>
-          <input type="date" id="activity_date" name="activity_date" value="{{ today }}">
-        </div>
-        <div class="field">
-          <label for="duration_minutes">Duración (min)</label>
-          <input type="number" id="duration_minutes" name="duration_minutes" min="0" placeholder="30">
-        </div>
-      </div>
-
-      <div class="field">
-        <label for="description">Descripción</label>
-        <textarea id="description" name="description" rows="4"
-                  placeholder="Detalle de la actividad (opcional)"></textarea>
-      </div>
-
-      <div class="field">
-        <label>Adjunto <span class="label-hint">(opcional)</span></label>
-        <div class="dropzone" id="dropzone">
-          <input type="file" id="attachment" name="attachment" hidden>
-          <svg class="dropzone-icon" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M12 16V4M12 4l-4 4M12 4l4 4"/>
-            <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
-          </svg>
-          <p class="dropzone-text">Arrastra un archivo aquí o <span class="dropzone-link">selecciónalo</span></p>
-          <p class="dropzone-filename" id="dropzoneFilename" hidden></p>
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <button type="reset" class="btn btn-ghost">Limpiar</button>
-        <button type="submit" class="btn btn-primary">Guardar actividad</button>
-      </div>
-    </form>
-  </section>
-
-  <aside class="panel sidebar">
-    <div class="today-stat">
-      <span class="today-number">{{ stats.minutes }}</span>
-      <span class="today-unit">min</span>
-      <span class="today-label">registrados hoy &middot; {{ stats.count }} actividad{{ 'es' if stats.count != 1 else '' }}</span>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">📋</span>
+      <span class="brand-name">Registro de Actividades</span>
     </div>
+    <div class="user-chip">
+      <span class="avatar">👤</span>
+      <span>Usuario X</span>
+    </div>
+  </header>
 
-    <h2 class="sidebar-title">Actividades recientes</h2>
+  <main class="layout">
+    <section class="main-column">
+      
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-stack">
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
 
-    {% if activities %}
+      <!-- PANEL 1: NUEVA ACTIVIDAD -->
+      <div class="panel">
+        <button type="button" class="panel-header" id="panelToggle" aria-expanded="false">
+          <span>Nueva actividad</span>
+          <span class="chevron">›</span>
+        </button>
+
+        <form action="{{ url_for('create_activity') }}" method="POST" enctype="multipart/form-data" class="activity-form" id="panelBody" style="display: none;">
+          <div class="field">
+            <label for="title">Título <span class="required">*</span></label>
+            <input type="text" id="title" name="title" required placeholder="Ej. Reunión de planeación">
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="category">Categoría</label>
+              <select id="category" name="category">
+                <option value="">Sin categoría</option>
+                {% for c in categories %}
+                  <option value="{{ c }}">{{ c|capitalize }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="activity_date">Fecha</label>
+              <input type="date" id="activity_date" name="activity_date" value="{{ today }}">
+            </div>
+
+            <div class="field">
+              <label for="duration_minutes">Duración (min)</label>
+              <input type="number" id="duration_minutes" name="duration_minutes" min="0" placeholder="0">
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="description">Descripción</label>
+            <textarea id="description" name="description" rows="3" placeholder="Detalles de la actividad..."></textarea>
+          </div>
+
+          <div class="field">
+            <label>Adjunto (opcional)</label>
+            <div class="dropzone" id="dropzone">
+              <div class="dropzone-text">Arrastra un archivo aquí o selecciónalo</div>
+              <div class="dropzone-filename" id="dropzoneFilename" hidden></div>
+            </div>
+            <input type="file" id="attachment" name="attachment" hidden>
+          </div>
+
+          <div class="form-actions">
+            <button type="reset" class="btn btn-ghost">Limpiar</button>
+            <button type="submit" class="btn btn-primary">Guardar actividad</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- PANEL 2: REGISTRO COMPLETO (ACTIVIDADES) -->
+      <div class="panel full-registry-panel">
+        <button type="button" class="panel-header accordion-header" id="registryToggle" aria-expanded="true">
+          <span>Registro Completo (Actividades)</span>
+          <span class="chevron">∨</span>
+        </button>
+
+        <div class="registry-body" id="registryBody">
+          {% if all_activities %}
+            <div class="full-activity-list">
+              {% for a in all_activities %}
+                <div class="registry-card">
+                  <div class="card-content">
+                    <div class="card-meta">
+                      <span class="card-category">{{ a.category or 'Sin categoría' }}</span>
+                      <span class="card-date">{{ a.activity_date }}</span>
+                    </div>
+                    
+                    <h4 class="card-title">{{ a.title }}</h4>
+                    <p class="card-desc">{{ a.description or 'Sin mensaje / descripción' }}</p>
+                    <div class="card-duration">{{ a.duration_minutes if a.duration_minutes is not none else '0' }} min</div>
+                    
+                    <div class="card-attachment-slot">
+                      {% if a.attachment_path %}
+                        <a href="{{ url_for('uploaded_file', filename=a.attachment_path) }}" target="_blank" class="attachment-box has-file">
+                          📄 Archivo: {{ a.attachment_path.split('_', 1)[1] if '_' in a.attachment_path else a.attachment_path }}
+                        </a>
+                      {% else %}
+                        <div class="attachment-box empty">Sin Archivo adjunto</div>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="card-actions">
+                        <button type="button" class="btn-action edit-btn"
+                          data-id="{{ a.id }}"
+                          data-title="{{ a.title|e }}"
+                          data-category="{{ (a.category or '')|e }}"
+                          data-date="{{ a.activity_date|e }}"
+                          data-duration="{{ a.duration_minutes if a.duration_minutes is not none else '' }}"
+                          data-description="{{ (a.description or '')|e }}"
+                          onclick="openEditModal(this.dataset.id, this.dataset.title, this.dataset.category, this.dataset.date, this.dataset.duration, this.dataset.description)">
+                      Editar
+                    </button>
+                    <button type="button" class="btn-action delete-btn" onclick="openDeleteModal('{{ a.id }}', '{{ a.title|escape }}')">
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-registry">No hay actividades registradas en el historial.</div>
+          {% endif %}
+        </div>
+      </div>
+
+    </section>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar panel">
+      <div class="today-stat">
+        <span class="today-number">{{ stats.minutes }}</span>
+        <span class="today-unit">min</span>
+        <div class="today-label">registrados hoy · {{ stats.count }} actividad{{ 'es' if stats.count != 1 else '' }}</div>
+      </div>
+
+      <h3 class="sidebar-title">Actividades recientes</h3>
       <ul class="ticket-list">
-        {% for a in activities %}
-          <li class="ticket">
-            <div class="ticket-top">
-              <span class="ticket-category">{{ a.category or 'sin categoría' }}</span>
-              <span class="ticket-date">{{ a.activity_date }}</span>
-            </div>
-            <p class="ticket-title">{{ a.title }}</p>
-            {% if a.description %}
-              <p class="ticket-desc">{{ a.description[:80] }}{{ '…' if a.description|length > 80 else '' }}</p>
-            {% endif %}
-            <div class="ticket-bottom">
-              <span class="ticket-duration">{{ a.duration_minutes if a.duration_minutes is not none else '—' }} min</span>
-              {% if a.attachment_path %}
-                <a class="ticket-attachment" href="{{ url_for('uploaded_file', filename=a.attachment_path) }}" target="_blank" rel="noopener">
-                  📎 adjunto
-                </a>
+        {% if activities %}
+          {% for a in activities %}
+            <li class="ticket">
+              <div class="ticket-top">
+                <span class="ticket-category">{{ a.category or 'SIN CATEGORÍA' }}</span>
+                <span>{{ a.activity_date }}</span>
+              </div>
+              <div class="ticket-title">{{ a.title }}</div>
+              {% if a.description %}
+                <div class="ticket-desc">{{ a.description[:80] }}{{ '…' if a.description|length > 80 else '' }}</div>
               {% endif %}
-            </div>
-          </li>
-        {% endfor %}
+              <div class="ticket-bottom">
+                <span class="ticket-duration">{{ a.duration_minutes if a.duration_minutes is not none else '—' }} min</span>
+                {% if a.attachment_path %}
+                  <a href="{{ url_for('uploaded_file', filename=a.attachment_path) }}" target="_blank" class="ticket-attachment">📎 adjunto</a>
+                {% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        {% else %}
+          <li class="empty-state">Aún no hay actividades.</li>
+        {% endif %}
       </ul>
-    {% else %}
-      <p class="empty-state">Aún no hay actividades. Registra la primera desde el formulario.</p>
-    {% endif %}
-  </aside>
+    </aside>
+  </main>
 
-</main>
+  <!-- MODAL EDITAR -->
+  <div class="modal" id="editModal">
+    <div class="modal-content">
+      <h3>Editar Actividad</h3>
+      <form id="editForm" method="POST" enctype="multipart/form-data">
+        <div class="field">
+          <label for="edit_title">Título *</label>
+          <input type="text" id="edit_title" name="title" required>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="edit_category">Categoría</label>
+            <select id="edit_category" name="category">
+              <option value="">Sin categoría</option>
+              {% for c in categories %}
+                <option value="{{ c }}">{{ c|capitalize }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="edit_date">Fecha</label>
+            <input type="date" id="edit_date" name="activity_date">
+          </div>
+          <div class="field">
+            <label for="edit_duration">Duración (min)</label>
+            <input type="number" id="edit_duration" name="duration_minutes" min="0">
+          </div>
+        </div>
+        <div class="field">
+          <label for="edit_description">Descripción</label>
+          <textarea id="edit_description" name="description" rows="3"></textarea>
+        </div>
+        <div class="field">
+          <label>Cambiar Adjunto (opcional)</label>
+          <input type="file" name="attachment">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="closeModal('editModal')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <!-- MODAL ELIMINAR -->
+  <div class="modal" id="deleteModal">
+    <div class="modal-content">
+      <h3>Confirmar Eliminación</h3>
+      <p>¿Estás seguro de que deseas eliminar la actividad "<strong id="deleteTargetTitle"></strong>"?</p>
+      <form id="deleteForm" method="POST">
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="closeModal('deleteModal')">Cancelar</button>
+          <button type="submit" class="btn btn-danger">Eliminar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
