@@ -22,6 +22,18 @@ if (registryToggle && registryBody) {
   });
 }
 
+// Colapsar / expandir el panel "Actividades Publicas"
+const publicToggle = document.getElementById("publicToggle");
+const publicBody = document.getElementById("publicBody");
+
+if (publicToggle && publicBody) {
+  publicToggle.addEventListener("click", () => {
+    const expanded = publicToggle.getAttribute("aria-expanded") === "true";
+    publicToggle.setAttribute("aria-expanded", String(!expanded));
+    publicBody.style.display = expanded ? "none" : "block";
+  });
+}
+
 // Zona de arrastrar y soltar archivo
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("attachment");
@@ -67,7 +79,7 @@ if (dropzone && fileInput) {
 }
 
 // Control de Modales (Editar / Eliminar)
-function openEditModal(id, title, category, date, duration, description) {
+function openEditModal(id, title, category, date, duration, description, visibility) {
   const modal = document.getElementById("editModal");
   const form = document.getElementById("editForm");
   
@@ -77,7 +89,21 @@ function openEditModal(id, title, category, date, duration, description) {
   document.getElementById("edit_date").value = date;
   document.getElementById("edit_duration").value = duration;
   document.getElementById("edit_description").value = description;
+  document.getElementById("edit_visibility").value = visibility || "privado";
   
+  modal.classList.add("active");
+}
+
+function openInspectModal(title, category, date, duration, description, author) {
+  const modal = document.getElementById("inspectModal");
+
+  document.getElementById("inspectTitle").textContent = title;
+  document.getElementById("inspectCategory").textContent = category;
+  document.getElementById("inspectDate").textContent = date;
+  document.getElementById("inspectDuration").textContent = duration;
+  document.getElementById("inspectDescription").textContent = description;
+  document.getElementById("inspectAuthor").textContent = author;
+
   modal.classList.add("active");
 }
 

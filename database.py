@@ -67,7 +67,10 @@ class ActivityDatabase:
                 conn.execute("ALTER TABLE activities ADD COLUMN attachment_path TEXT")
             if "user_id" not in cols:
                 conn.execute("ALTER TABLE activities ADD COLUMN user_id INTEGER")
+            if "is_public" not in cols:
+                conn.execute("ALTER TABLE activities ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_user ON activities(user_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_public ON activities(is_public)")
 
     def add(self, activity: Activity, user_id: int) -> Activity:
         now = datetime.now().isoformat(timespec="seconds")
@@ -75,11 +78,11 @@ class ActivityDatabase:
             cur = conn.execute(
                 """INSERT INTO activities
                    (title, description, category, activity_date, duration_minutes,
-                    attachment_path, created_at, updated_at, user_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    attachment_path, created_at, updated_at, user_id, is_public)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (activity.title, activity.description, activity.category,
                  activity.activity_date, activity.duration_minutes,
-                 activity.attachment_path, now, now, user_id),
+                 activity.attachment_path, now, now, user_id, int(activity.is_public)),
             )
             activity.id = cur.lastrowid
             activity.created_at = now
@@ -117,7 +120,7 @@ class ActivityDatabase:
             return None
 
         allowed = {"title", "description", "category", "activity_date",
-                   "duration_minutes", "attachment_path"}
+                   "duration_minutes", "attachment_path", "is_public"}
         updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
         if not updates:
             return current
@@ -133,6 +136,9 @@ class ActivityDatabase:
             duration_minutes=merged["duration_minutes"],
         )
 
+        if "is_public" in updates:
+            updates["is_public"] = int(updates["is_public"])
+
         now = datetime.now().isoformat(timespec="seconds")
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         with self._connect() as conn:
@@ -141,6 +147,25 @@ class ActivityDatabase:
                 (*updates.values(), now, activity_id, user_id),
             )
         return self.get(activity_id, user_id)
+
+    def list_public(self) -> List[dict]:
+        """Actividades marcadas como públicas por cualquier usuario, con el
+        correo del autor incluido (solo lectura, no expone user_id ni datos
+        de sesión de otros usuarios)."""
+        query = """
+            SELECT activities.id, activities.title, activities.description,
+                   activities.category, activities.activity_date,
+                   activities.duration_minutes, activities.attachment_path,
+                   users.email AS author_email
+            FROM activities
+            JOIN users ON users.id = activities.user_id
+            WHERE activities.is_public = 1
+            ORDER BY activities.activity_date DESC, activities.id DESC
+        """
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(query).fetchall()
+        return [dict(r) for r in rows]
 
     def delete(self, activity_id: int, user_id: int) -> bool:
         with self._connect() as conn:

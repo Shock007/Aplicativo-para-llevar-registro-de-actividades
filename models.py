@@ -68,6 +68,7 @@ class Activity:
     activity_date: str = field(default_factory=lambda: date.today().isoformat())
     duration_minutes: Optional[int] = None
     attachment_path: Optional[str] = None
+    is_public: bool = False
     id: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -102,7 +103,8 @@ class Activity:
     def from_row(cls, row: tuple) -> "Activity":
         """Construye una Activity a partir de una fila de SQLite (SELECT * ...)."""
         (id_, title, description, category, activity_date,
-         duration_minutes, attachment_path, created_at, updated_at, user_id) = row
+         duration_minutes, attachment_path, created_at, updated_at, user_id,
+         is_public) = row
         obj = cls(
             title=title,
             description=description,
@@ -111,6 +113,7 @@ class Activity:
             duration_minutes=duration_minutes,
             attachment_path=attachment_path,
             user_id=user_id,
+            is_public=bool(is_public),
         )
         obj.id = id_
         obj.created_at = created_at

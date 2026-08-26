@@ -100,6 +100,7 @@ def index():
         "index.html",
         activities=activities[:8],
         all_activities=activities,
+        public_activities=db.list_public(),
         categories=CATEGORIES,
         today=date.today().isoformat(),
         stats=_today_stats(activities),
@@ -119,6 +120,7 @@ def create_activity():
                 int(request.form["duration_minutes"]) if request.form.get("duration_minutes") else None
             ),
             "attachment_path": attachment_path,
+            "is_public": request.form.get("visibility") == "publico",
         }
         activity_date = request.form.get("activity_date")
         if activity_date:
@@ -145,6 +147,7 @@ def edit_activity(activity_id):
             "category": request.form.get("category") or None,
             "duration_minutes": int(request.form["duration_minutes"]) if request.form.get("duration_minutes") else None,
             "activity_date": request.form.get("activity_date"),
+            "is_public": request.form.get("visibility") == "publico",
         }
         if attachment_path:
             fields["attachment_path"] = attachment_path

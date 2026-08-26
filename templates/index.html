@@ -82,8 +82,17 @@
           </div>
 
           <div class="form-actions">
-            <button type="reset" class="btn btn-ghost">Limpiar</button>
-            <button type="submit" class="btn btn-primary">Guardar actividad</button>
+            <div class="field visibility-field">
+              <label for="visibility">Visibilidad</label>
+              <select id="visibility" name="visibility">
+                <option value="privado">Privado</option>
+                <option value="publico">Público</option>
+              </select>
+            </div>
+            <div class="form-actions-buttons">
+              <button type="reset" class="btn btn-ghost">Limpiar</button>
+              <button type="submit" class="btn btn-primary">Guardar actividad</button>
+            </div>
           </div>
         </form>
       </div>
@@ -103,6 +112,9 @@
                   <div class="card-content">
                     <div class="card-meta">
                       <span class="card-category">{{ a.category or 'Sin categoría' }}</span>
+                      <span class="visibility-badge {{ 'is-public' if a.is_public else 'is-private' }}">
+                        {{ 'Público' if a.is_public else 'Privado' }}
+                      </span>
                       <span class="card-date">{{ a.activity_date }}</span>
                     </div>
                     
@@ -129,7 +141,8 @@
                           data-date="{{ a.activity_date|e }}"
                           data-duration="{{ a.duration_minutes if a.duration_minutes is not none else '' }}"
                           data-description="{{ (a.description or '')|e }}"
-                          onclick="openEditModal(this.dataset.id, this.dataset.title, this.dataset.category, this.dataset.date, this.dataset.duration, this.dataset.description)">
+                          data-visibility="{{ 'publico' if a.is_public else 'privado' }}"
+                          onclick="openEditModal(this.dataset.id, this.dataset.title, this.dataset.category, this.dataset.date, this.dataset.duration, this.dataset.description, this.dataset.visibility)">
                       Editar
                     </button>
                     <button type="button" class="btn-action delete-btn" onclick="openDeleteModal('{{ a.id }}', '{{ a.title|escape }}')">
@@ -141,6 +154,59 @@
             </div>
           {% else %}
             <div class="empty-registry">No hay actividades registradas en el historial.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- PANEL 3: ACTIVIDADES PÚBLICAS -->
+      <div class="panel full-registry-panel">
+        <button type="button" class="panel-header accordion-header" id="publicToggle" aria-expanded="true">
+          <span>Actividades Publicas</span>
+          <span class="chevron">∨</span>
+        </button>
+
+        <div class="registry-body" id="publicBody">
+          {% if public_activities %}
+            <div class="full-activity-list">
+              {% for a in public_activities %}
+                <div class="registry-card">
+                  <div class="card-content">
+                    <div class="card-meta">
+                      <span class="card-category">{{ a.category or 'Sin categoría' }}</span>
+                      <span class="card-date">{{ a.activity_date }}</span>
+                    </div>
+
+                    <h4 class="card-title">{{ a.title }}</h4>
+                    <p class="card-desc">{{ a.description or 'Sin mensaje / descripción' }}</p>
+                    <div class="card-duration">{{ a.duration_minutes if a.duration_minutes is not none else '0' }} min</div>
+                    <div class="card-author">Publicado por: {{ a.author_email }}</div>
+
+                    <div class="card-attachment-slot">
+                      {% if a.attachment_path %}
+                        <span class="attachment-box has-file">📄 Archivo adjunto</span>
+                      {% else %}
+                        <div class="attachment-box empty">Sin Archivo adjunto</div>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="card-actions">
+                    <button type="button" class="btn-action inspect-btn"
+                      data-title="{{ a.title|e }}"
+                      data-category="{{ (a.category or 'Sin categoría')|e }}"
+                      data-date="{{ a.activity_date|e }}"
+                      data-duration="{{ a.duration_minutes if a.duration_minutes is not none else '0' }}"
+                      data-description="{{ (a.description or 'Sin mensaje / descripción')|e }}"
+                      data-author="{{ a.author_email|e }}"
+                      onclick="openInspectModal(this.dataset.title, this.dataset.category, this.dataset.date, this.dataset.duration, this.dataset.description, this.dataset.author)">
+                      Inspeccionar
+                    </button>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-registry">Todavía no hay actividades públicas.</div>
           {% endif %}
         </div>
       </div>
@@ -220,10 +286,32 @@
           <input type="file" name="attachment">
         </div>
         <div class="modal-actions">
+          <div class="field visibility-field">
+            <label for="edit_visibility">Visibilidad</label>
+            <select id="edit_visibility" name="visibility">
+              <option value="privado">Privado</option>
+              <option value="publico">Público</option>
+            </select>
+          </div>
           <button type="button" class="btn btn-ghost" onclick="closeModal('editModal')">Cancelar</button>
           <button type="submit" class="btn btn-primary">Guardar Cambios</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL INSPECCIONAR (ACTIVIDAD PÚBLICA, SOLO LECTURA) -->
+  <div class="modal" id="inspectModal">
+    <div class="modal-content">
+      <h3 id="inspectTitle"></h3>
+      <p><strong>Categoría:</strong> <span id="inspectCategory"></span></p>
+      <p><strong>Fecha:</strong> <span id="inspectDate"></span></p>
+      <p><strong>Duración:</strong> <span id="inspectDuration"></span> min</p>
+      <p><strong>Descripción:</strong> <span id="inspectDescription"></span></p>
+      <p><strong>Publicado por:</strong> <span id="inspectAuthor"></span></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('inspectModal')">Cerrar</button>
+      </div>
     </div>
   </div>
 
