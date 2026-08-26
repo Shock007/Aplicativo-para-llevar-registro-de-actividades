@@ -14,7 +14,8 @@
     </div>
     <div class="user-chip">
       <span class="avatar">👤</span>
-      <span>Usuario X</span>
+      <span>{{ user_email }}</span>
+      <a href="{{ url_for('logout') }}" class="logout-link">Cerrar sesión</a>
     </div>
   </header>
 

@@ -3,12 +3,16 @@ import os
 import uuid
 from datetime import date
 from flask import (
-    Flask, render_template, request, redirect, url_for, flash, send_from_directory
+    Flask, render_template, request, redirect, url_for, flash, session, send_from_directory
 )
 from werkzeug.utils import secure_filename
 from config import BASE_DIR
-from database import ActivityDatabase
-from models import Activity, ActivityValidationError
+from database import ActivityDatabase, UserDatabase
+from models import Activity, ActivityValidationError, User
+from auth import (
+    hash_password, verify_password, validate_password_strength,
+    login_required, current_user_id, current_user_email,
+)
 
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -17,7 +21,54 @@ ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "txt", "docx", "xlsx", "csv"}
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-only-not-secure")
 db = ActivityDatabase()
+users_db = UserDatabase()
 CATEGORIES = ["trabajo", "estudio", "salud", "personal", "otro"]
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if current_user_id():
+        return redirect(url_for("index"))
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        try:
+            validate_password_strength(password)
+            if password != confirm_password:
+                raise ActivityValidationError("Las contraseñas no coinciden.")
+            user = User(email=email, password_hash=hash_password(password))
+            saved = users_db.create(user)
+            session["user_id"] = saved.id
+            session["user_email"] = saved.email
+            flash("Cuenta creada correctamente.", "success")
+            return redirect(url_for("index"))
+        except ActivityValidationError as e:
+            flash(str(e), "error")
+    return render_template("register.html")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user_id():
+        return redirect(url_for("index"))
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        user = users_db.get_by_email(email)
+        if user and verify_password(password, user.password_hash):
+            session["user_id"] = user.id
+            session["user_email"] = user.email
+            return redirect(url_for("index"))
+        flash("Correo o contraseña incorrectos.", "error")
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    flash("Sesión cerrada.", "success")
+    return redirect(url_for("login"))
 
 def _allowed(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -41,8 +92,10 @@ def _today_stats(activities):
     return {"minutes": minutes, "count": count}
 
 @app.route("/", methods=["GET"])
+@login_required
 def index():
-    activities = db.list()
+    uid = current_user_id()
+    activities = db.list(user_id=uid)
     return render_template(
         "index.html",
         activities=activities[:8],
@@ -50,9 +103,11 @@ def index():
         categories=CATEGORIES,
         today=date.today().isoformat(),
         stats=_today_stats(activities),
+        user_email=current_user_email(),
     )
 
 @app.route("/activities", methods=["POST"])
+@login_required
 def create_activity():
     try:
         attachment_path = _save_attachment(request.files.get("attachment"))
@@ -69,7 +124,7 @@ def create_activity():
         if activity_date:
             kwargs["activity_date"] = activity_date
         activity = Activity(**kwargs)
-        saved = db.add(activity)
+        saved = db.add(activity, user_id=current_user_id())
         flash(f"Actividad “{saved.title}” registrada correctamente.", "success")
     except ActivityValidationError as e:
         flash(str(e), "error")
@@ -78,6 +133,7 @@ def create_activity():
     return redirect(url_for("index"))
 
 @app.route("/activities/<int:activity_id>/edit", methods=["POST"])
+@login_required
 def edit_activity(activity_id):
     try:
         new_attachment = request.files.get("attachment")
@@ -93,7 +149,7 @@ def edit_activity(activity_id):
         if attachment_path:
             fields["attachment_path"] = attachment_path
 
-        updated = db.update(activity_id, **fields)
+        updated = db.update(activity_id, user_id=current_user_id(), **fields)
         if updated:
             flash(f"Actividad #{activity_id} actualizada correctamente.", "success")
         else:
@@ -105,8 +161,9 @@ def edit_activity(activity_id):
     return redirect(url_for("index"))
 
 @app.route("/activities/<int:activity_id>/delete", methods=["POST"])
+@login_required
 def delete_activity(activity_id):
-    deleted = db.delete(activity_id)
+    deleted = db.delete(activity_id, user_id=current_user_id())
     if deleted:
         flash(f"Actividad #{activity_id} eliminada correctamente.", "success")
     else:
@@ -114,6 +171,7 @@ def delete_activity(activity_id):
     return redirect(url_for("index"))
 
 @app.route("/uploads/<path:filename>")
+@login_required
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_DIR, filename)
 

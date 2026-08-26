@@ -4,14 +4,49 @@ Define la estructura de datos de una Actividad.
 Fase 1 (MVP Local): sin cifrado todavía; eso se añade en Fase 2.
 """
 
+import re
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, date
 from typing import Optional
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class ActivityValidationError(ValueError):
     """Error de validación de datos de una actividad."""
     pass
+
+
+@dataclass
+class User:
+    """
+    Representa una cuenta de usuario.
+
+    email: identificador de acceso (único, se normaliza a minúsculas)
+    password_hash: hash de la contraseña (nunca se guarda en texto plano)
+    id / created_at: metadatos asignados por la base de datos
+    """
+    email: str
+    password_hash: str = ""
+    id: Optional[int] = None
+    created_at: Optional[str] = None
+
+    def __post_init__(self):
+        self.validate()
+
+    def validate(self):
+        email = (self.email or "").strip()
+        if not email or not EMAIL_RE.match(email):
+            raise ActivityValidationError("Correo electrónico inválido.")
+        self.email = email.lower()
+
+    @classmethod
+    def from_row(cls, row: tuple) -> "User":
+        id_, email, password_hash, created_at = row
+        obj = cls(email=email, password_hash=password_hash)
+        obj.id = id_
+        obj.created_at = created_at
+        return obj
 
 
 @dataclass
@@ -36,6 +71,7 @@ class Activity:
     id: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    user_id: Optional[int] = None
 
     def __post_init__(self):
         self.validate()
@@ -66,7 +102,7 @@ class Activity:
     def from_row(cls, row: tuple) -> "Activity":
         """Construye una Activity a partir de una fila de SQLite (SELECT * ...)."""
         (id_, title, description, category, activity_date,
-         duration_minutes, attachment_path, created_at, updated_at) = row
+         duration_minutes, attachment_path, created_at, updated_at, user_id) = row
         obj = cls(
             title=title,
             description=description,
@@ -74,6 +110,7 @@ class Activity:
             activity_date=activity_date,
             duration_minutes=duration_minutes,
             attachment_path=attachment_path,
+            user_id=user_id,
         )
         obj.id = id_
         obj.created_at = created_at

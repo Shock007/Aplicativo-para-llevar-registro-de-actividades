@@ -12,7 +12,7 @@ from typing import List, Optional
 from contextlib import contextmanager
 
 from config import DB_PATH
-from models import Activity
+from models import Activity, ActivityValidationError, User
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS activities (
@@ -24,10 +24,20 @@ CREATE TABLE IF NOT EXISTS activities (
     duration_minutes INTEGER,
     attachment_path TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    user_id INTEGER REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS idx_activities_date ON activities(activity_date);
 CREATE INDEX IF NOT EXISTS idx_activities_category ON activities(category);
+"""
+
+USERS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -48,39 +58,47 @@ class ActivityDatabase:
 
     def _init_schema(self):
         with self._connect() as conn:
+            conn.executescript(USERS_SCHEMA)
             conn.executescript(SCHEMA)
-            # Migración: si la DB es de una versión anterior sin attachment_path, se agrega.
+            # Migraciones: si la DB es de una versión anterior, se agregan columnas nuevas
+            # ANTES de crear cualquier índice que dependa de ellas.
             cols = [r[1] for r in conn.execute("PRAGMA table_info(activities)").fetchall()]
             if "attachment_path" not in cols:
                 conn.execute("ALTER TABLE activities ADD COLUMN attachment_path TEXT")
+            if "user_id" not in cols:
+                conn.execute("ALTER TABLE activities ADD COLUMN user_id INTEGER")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_user ON activities(user_id)")
 
-    def add(self, activity: Activity) -> Activity:
+    def add(self, activity: Activity, user_id: int) -> Activity:
         now = datetime.now().isoformat(timespec="seconds")
         with self._connect() as conn:
             cur = conn.execute(
                 """INSERT INTO activities
-                   (title, description, category, activity_date, duration_minutes, attachment_path, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (title, description, category, activity_date, duration_minutes,
+                    attachment_path, created_at, updated_at, user_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (activity.title, activity.description, activity.category,
                  activity.activity_date, activity.duration_minutes,
-                 activity.attachment_path, now, now),
+                 activity.attachment_path, now, now, user_id),
             )
             activity.id = cur.lastrowid
             activity.created_at = now
             activity.updated_at = now
+            activity.user_id = user_id
         return activity
 
-    def get(self, activity_id: int) -> Optional[Activity]:
+    def get(self, activity_id: int, user_id: int) -> Optional[Activity]:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT * FROM activities WHERE id = ?", (activity_id,)
+                "SELECT * FROM activities WHERE id = ? AND user_id = ?",
+                (activity_id, user_id),
             ).fetchone()
         return Activity.from_row(row) if row else None
 
-    def list(self, category: Optional[str] = None,
+    def list(self, user_id: int, category: Optional[str] = None,
               activity_date: Optional[str] = None) -> List[Activity]:
-        query = "SELECT * FROM activities WHERE 1=1"
-        params = []
+        query = "SELECT * FROM activities WHERE user_id = ?"
+        params = [user_id]
         if category:
             query += " AND category = ?"
             params.append(category)
@@ -93,8 +111,8 @@ class ActivityDatabase:
             rows = conn.execute(query, params).fetchall()
         return [Activity.from_row(r) for r in rows]
 
-    def update(self, activity_id: int, **fields) -> Optional[Activity]:
-        current = self.get(activity_id)
+    def update(self, activity_id: int, user_id: int, **fields) -> Optional[Activity]:
+        current = self.get(activity_id, user_id)
         if not current:
             return None
 
@@ -119,12 +137,65 @@ class ActivityDatabase:
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         with self._connect() as conn:
             conn.execute(
-                f"UPDATE activities SET {set_clause}, updated_at = ? WHERE id = ?",
-                (*updates.values(), now, activity_id),
+                f"UPDATE activities SET {set_clause}, updated_at = ? WHERE id = ? AND user_id = ?",
+                (*updates.values(), now, activity_id, user_id),
             )
-        return self.get(activity_id)
+        return self.get(activity_id, user_id)
 
-    def delete(self, activity_id: int) -> bool:
+    def delete(self, activity_id: int, user_id: int) -> bool:
         with self._connect() as conn:
-            cur = conn.execute("DELETE FROM activities WHERE id = ?", (activity_id,))
+            cur = conn.execute(
+                "DELETE FROM activities WHERE id = ? AND user_id = ?",
+                (activity_id, user_id),
+            )
         return cur.rowcount > 0
+
+
+class UserDatabase:
+    """CRUD de cuentas de usuario. Las contraseñas siempre llegan ya hasheadas
+    (ver auth.py) — esta capa nunca ve ni guarda texto plano."""
+
+    def __init__(self, db_path=DB_PATH):
+        self.db_path = str(db_path)
+        self._init_schema()
+
+    @contextmanager
+    def _connect(self):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _init_schema(self):
+        with self._connect() as conn:
+            conn.executescript(USERS_SCHEMA)
+
+    def create(self, user: User) -> User:
+        now = datetime.now().isoformat(timespec="seconds")
+        with self._connect() as conn:
+            try:
+                cur = conn.execute(
+                    "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
+                    (user.email, user.password_hash, now),
+                )
+            except sqlite3.IntegrityError:
+                raise ActivityValidationError(
+                    "Ya existe una cuenta registrada con ese correo electrónico."
+                )
+            user.id = cur.lastrowid
+            user.created_at = now
+        return user
+
+    def get_by_email(self, email: str) -> Optional[User]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM users WHERE email = ?", (email.strip().lower(),)
+            ).fetchone()
+        return User.from_row(row) if row else None
+
+    def get_by_id(self, user_id: int) -> Optional[User]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return User.from_row(row) if row else None

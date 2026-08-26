@@ -1,4 +1,6 @@
 python-dotenv>=1.0.0
-# cryptography  -> se añadirá en Fase 2 (capa de seguridad)
+Flask>=3.0.0
+Werkzeug>=3.0.0
+# cryptography  -> se añadirá en Fase 2 (capa de seguridad de datos)
 # PyDrive2       -> se añadirá en Fase 3 (integración Google Drive)
 # mega.py        -> se añadirá en Fase 3 (integración MEGA, opcional)
