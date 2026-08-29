@@ -178,15 +178,6 @@ class ActivityDatabase:
                 (activity_id, user_id),
             )
         return cur.rowcount > 0
-    def _init_schema(self):
-        with self._connect() as conn:
-            conn.executescript(USERS_SCHEMA)
-            conn.executescript(SCHEMA)
-            user_cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
-        if "encryption_salt" not in user_cols:
-            conn.execute("ALTER TABLE users ADD COLUMN encryption_salt TEXT")
-            cols = [r[1] for r in conn.execute("PRAGMA table_info(activities)").fetchall()]
-        # ... resto de migraciones de activities sin cambios
 
 
 class UserDatabase:
@@ -210,6 +201,9 @@ class UserDatabase:
     def _init_schema(self):
         with self._connect() as conn:
             conn.executescript(USERS_SCHEMA)
+            user_cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+            if "encryption_salt" not in user_cols:
+                conn.execute("ALTER TABLE users ADD COLUMN encryption_salt TEXT")
 
     def create(self, user: User) -> User:
         now = datetime.now().isoformat(timespec="seconds")
@@ -238,10 +232,3 @@ class UserDatabase:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         return User.from_row(row) if row else None
-
-    def _init_schema(self):
-        with self._connect() as conn:
-            conn.executescript(USERS_SCHEMA)
-            user_cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
-            if "encryption_salt" not in user_cols:
-                conn.execute("ALTER TABLE users ADD COLUMN encryption_salt TEXT")
