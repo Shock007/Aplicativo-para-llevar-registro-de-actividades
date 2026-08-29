@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
+    encryption_salt TEXT,
     created_at TEXT NOT NULL
 );
 """
@@ -62,6 +63,9 @@ class ActivityDatabase:
             conn.executescript(SCHEMA)
             # Migraciones: si la DB es de una versión anterior, se agregan columnas nuevas
             # ANTES de crear cualquier índice que dependa de ellas.
+            user_cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+            if "encryption_salt" not in user_cols:
+                conn.execute("ALTER TABLE users ADD COLUMN encryption_salt TEXT")
             cols = [r[1] for r in conn.execute("PRAGMA table_info(activities)").fetchall()]
             if "attachment_path" not in cols:
                 conn.execute("ALTER TABLE activities ADD COLUMN attachment_path TEXT")
@@ -196,6 +200,7 @@ class UserDatabase:
     @contextmanager
     def _connect(self):
         conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA foreign_keys = ON")
         try:
             yield conn
             conn.commit()
@@ -233,9 +238,10 @@ class UserDatabase:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         return User.from_row(row) if row else None
+
     def _init_schema(self):
         with self._connect() as conn:
             conn.executescript(USERS_SCHEMA)
             user_cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
-        if "encryption_salt" not in user_cols:
-            conn.execute("ALTER TABLE users ADD COLUMN encryption_salt TEXT")
+            if "encryption_salt" not in user_cols:
+                conn.execute("ALTER TABLE users ADD COLUMN encryption_salt TEXT")
