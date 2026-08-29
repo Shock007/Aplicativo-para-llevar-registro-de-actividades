@@ -6,6 +6,8 @@ La sincronización a la nube (Fase 3) siempre pasará por el cifrado (Fase 2)
 antes de tocar este módulo.
 """
 
+import os
+import os
 import sqlite3
 from datetime import datetime
 from typing import List, Optional
@@ -207,11 +209,14 @@ class UserDatabase:
 
     def create(self, user: User) -> User:
         now = datetime.now().isoformat(timespec="seconds")
+        if not user.encryption_salt:
+            user.encryption_salt = os.urandom(16).hex()
         with self._connect() as conn:
             try:
                 cur = conn.execute(
-                    "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-                    (user.email, user.password_hash, now),
+                    "INSERT INTO users (email, password_hash, encryption_salt, created_at) "
+                    "VALUES (?, ?, ?, ?)",
+                    (user.email, user.password_hash, user.encryption_salt, now),
                 )
             except sqlite3.IntegrityError:
                 raise ActivityValidationError(

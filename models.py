@@ -5,6 +5,7 @@ Fase 1 (MVP Local): sin cifrado todavía; eso se añade en Fase 2.
 """
 
 import re
+import os
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, date
 from typing import Optional
@@ -28,6 +29,7 @@ class User:
     """
     email: str
     password_hash: str = ""
+    encryption_salt: Optional[str] = None
     id: Optional[int] = None
     created_at: Optional[str] = None
 
@@ -42,8 +44,8 @@ class User:
 
     @classmethod
     def from_row(cls, row: tuple) -> "User":
-        id_, email, password_hash, created_at = row
-        obj = cls(email=email, password_hash=password_hash)
+        id_, email, password_hash, encryption_salt, created_at = row
+        obj = cls(email=email, password_hash=password_hash, encryption_salt=encryption_salt)
         obj.id = id_
         obj.created_at = created_at
         return obj
