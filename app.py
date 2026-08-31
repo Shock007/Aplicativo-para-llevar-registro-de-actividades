@@ -2,6 +2,7 @@
 import os
 import uuid
 from datetime import date
+from crypto import derive_key
 from flask import (
     Flask, render_template, request, redirect, url_for, flash, session, send_from_directory
 )
@@ -17,9 +18,24 @@ from auth import (
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "txt", "docx", "xlsx", "csv"}
+FLASK_DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
+FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
+
+if not FLASK_SECRET_KEY:
+    if FLASK_DEBUG:
+        FLASK_SECRET_KEY = "dev-only-not-secure"
+    else:
+        raise RuntimeError(
+            "FLASK_SECRET_KEY no está definida. Es obligatoria fuera de modo debug: "
+            "sin ella, la sesión firmada (que ahora también transporta la clave de "
+            "cifrado derivada en /login) quedaría protegida con un secreto público "
+            "y predecible. Genera una con: "
+            "python -c \"import secrets; print(secrets.token_hex(32))\" "
+            "y agrégala a tu .env como FLASK_SECRET_KEY."
+        )
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-only-not-secure")
+app.secret_key = FLASK_SECRET_KEY
 db = ActivityDatabase()
 users_db = UserDatabase()
 CATEGORIES = ["trabajo", "estudio", "salud", "personal", "otro"]
@@ -39,8 +55,10 @@ def register():
                 raise ActivityValidationError("Las contraseñas no coinciden.")
             user = User(email=email, password_hash=hash_password(password))
             saved = users_db.create(user)
+            fernet_key = derive_key(password, bytes.fromhex(saved.encryption_salt))
             session["user_id"] = saved.id
             session["user_email"] = saved.email
+            session["enc_key"] = fernet_key.decode("utf-8")
             flash("Cuenta creada correctamente.", "success")
             return redirect(url_for("index"))
         except ActivityValidationError as e:
@@ -57,8 +75,12 @@ def login():
         password = request.form.get("password", "")
         user = users_db.get_by_email(email)
         if user and verify_password(password, user.password_hash):
+            if not user.encryption_salt:
+                user.encryption_salt = users_db.ensure_encryption_salt(user.id)
+            fernet_key = derive_key(password, bytes.fromhex(user.encryption_salt))
             session["user_id"] = user.id
             session["user_email"] = user.email
+            session["enc_key"] = fernet_key.decode("utf-8")
             return redirect(url_for("index"))
         flash("Correo o contraseña incorrectos.", "error")
     return render_template("login.html")
@@ -179,4 +201,4 @@ def uploaded_file(filename):
     return send_from_directory(UPLOAD_DIR, filename)
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=FLASK_DEBUG, host="0.0.0.0", port=5000)

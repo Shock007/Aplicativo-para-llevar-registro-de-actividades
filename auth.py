@@ -51,3 +51,6 @@ def current_user_id():
 
 def current_user_email():
     return session.get("user_email")
+
+def current_enc_key():
+    return session.get("enc_key")

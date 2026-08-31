@@ -237,3 +237,14 @@ class UserDatabase:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         return User.from_row(row) if row else None
+
+    def ensure_encryption_salt(self, user_id: int) -> str:
+        """Genera y persiste un salt de cifrado para cuentas creadas antes de
+        la Fase 2 (retrocompatibilidad). Devuelve el salt en hex."""
+        salt_hex = os.urandom(16).hex()
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE users SET encryption_salt = ? WHERE id = ? AND encryption_salt IS NULL",
+                (salt_hex, user_id),
+            )
+        return salt_hex
