@@ -53,4 +53,5 @@ def current_user_email():
     return session.get("user_email")
 
 def current_enc_key():
-    return session.get("enc_key")
+    key = session.get("enc_key")
+    return key.encode("utf-8") if key else None

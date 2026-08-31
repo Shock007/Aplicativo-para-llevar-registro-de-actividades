@@ -1,17 +1,18 @@
 """ app.py Interfaz web (Fase 1 - MVP Local) """
 import os
 import uuid
+import io
 from datetime import date
-from crypto import derive_key
+from crypto import derive_key, encrypt_bytes, decrypt_bytes, DecryptionError
 from flask import (
-    Flask, render_template, request, redirect, url_for, flash, session, send_from_directory
+    Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, send_file
 )
 from werkzeug.utils import secure_filename
 from config import BASE_DIR
 from database import ActivityDatabase, UserDatabase
 from models import Activity, ActivityValidationError, User
 from auth import (
-    hash_password, verify_password, validate_password_strength,
+    current_enc_key, hash_password, verify_password, validate_password_strength,
     login_required, current_user_id, current_user_email,
 )
 
@@ -95,7 +96,7 @@ def logout():
 def _allowed(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def _save_attachment(file_storage) -> str | None:
+def _save_attachment(file_storage, key) -> str | None:
     if not file_storage or not file_storage.filename:
         return None
     if not _allowed(file_storage.filename):
@@ -104,9 +105,12 @@ def _save_attachment(file_storage) -> str | None:
         )
     safe_name = secure_filename(file_storage.filename)
     stored_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
-    file_storage.save(UPLOAD_DIR / stored_name)
+    raw = file_storage.read()
+    encrypted = encrypt_bytes(key, raw)
+    with open(UPLOAD_DIR / stored_name, "wb") as out:
+        out.write(encrypted)
     return stored_name
-
+    
 def _today_stats(activities):
     today = date.today().isoformat()
     minutes = sum(a.duration_minutes or 0 for a in activities if a.activity_date == today)
@@ -117,7 +121,7 @@ def _today_stats(activities):
 @login_required
 def index():
     uid = current_user_id()
-    activities = db.list(user_id=uid)
+    activities = db.list(user_id=uid, key=current_enc_key())
     return render_template(
         "index.html",
         activities=activities[:8],
@@ -133,7 +137,7 @@ def index():
 @login_required
 def create_activity():
     try:
-        attachment_path = _save_attachment(request.files.get("attachment"))
+        attachment_path = _save_attachment(request.files.get("attachment"), current_enc_key())
         kwargs = {
             "title": request.form.get("title", "").strip(),
             "description": request.form.get("description", "").strip() or None,
@@ -148,7 +152,7 @@ def create_activity():
         if activity_date:
             kwargs["activity_date"] = activity_date
         activity = Activity(**kwargs)
-        saved = db.add(activity, user_id=current_user_id())
+        saved = db.add(activity, user_id=current_user_id(), key=current_enc_key())
         flash(f"Actividad “{saved.title}” registrada correctamente.", "success")
     except ActivityValidationError as e:
         flash(str(e), "error")
@@ -161,8 +165,7 @@ def create_activity():
 def edit_activity(activity_id):
     try:
         new_attachment = request.files.get("attachment")
-        attachment_path = _save_attachment(new_attachment) if new_attachment and new_attachment.filename else None
-
+        attachment_path = _save_attachment(new_attachment, current_enc_key()) if new_attachment and new_attachment.filename else None
         fields = {
             "title": request.form.get("title", "").strip(),
             "description": request.form.get("description", "").strip() or None,
@@ -174,7 +177,7 @@ def edit_activity(activity_id):
         if attachment_path:
             fields["attachment_path"] = attachment_path
 
-        updated = db.update(activity_id, user_id=current_user_id(), **fields)
+        updated = db.update(activity_id, user_id=current_user_id(), key=current_enc_key(), **fields)
         if updated:
             flash(f"Actividad #{activity_id} actualizada correctamente.", "success")
         else:
@@ -198,7 +201,23 @@ def delete_activity(activity_id):
 @app.route("/uploads/<path:filename>")
 @login_required
 def uploaded_file(filename):
-    return send_from_directory(UPLOAD_DIR, filename)
+    safe_name = secure_filename(filename)
+    filepath = UPLOAD_DIR / safe_name
+    if not filepath.is_file():
+        flash("Archivo no encontrado.", "error")
+        return redirect(url_for("index"))
+
+    with open(filepath, "rb") as f:
+        raw = f.read()
+
+    key = current_enc_key()
+    try:
+        data = decrypt_bytes(key, raw) if key else raw
+    except DecryptionError:
+        data = raw  # archivo legado (pre-Fase 2) o cifrado con otra clave
+
+    display_name = safe_name.split("_", 1)[1] if "_" in safe_name else safe_name
+    return send_file(io.BytesIO(data), download_name=display_name, as_attachment=False)
 
 if __name__ == "__main__":
     app.run(debug=FLASK_DEBUG, host="0.0.0.0", port=5000)

@@ -23,6 +23,7 @@ import argparse
 import os
 import sys
 
+from crypto import derive_key
 from database import ActivityDatabase, UserDatabase
 from models import Activity, ActivityValidationError
 from auth import verify_password
@@ -73,9 +74,8 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def authenticate(email: str | None, password: str | None) -> int:
-    """Resuelve credenciales (flags > variables de entorno) y devuelve el
-    user_id si son válidas. Termina el proceso con error si no."""
+def authenticate(email: str | None, password: str | None):
+    """Resuelve credenciales y devuelve (user_id, fernet_key)."""
     email = email or os.getenv("ACTIVITY_CLI_EMAIL")
     password = password or os.getenv("ACTIVITY_CLI_PASSWORD")
 
@@ -93,7 +93,11 @@ def authenticate(email: str | None, password: str | None) -> int:
         print("Error: correo o contraseña incorrectos.", file=sys.stderr)
         sys.exit(1)
 
-    return user.id
+    if not user.encryption_salt:
+        user.encryption_salt = users_db.ensure_encryption_salt(user.id)
+    key = derive_key(password, bytes.fromhex(user.encryption_salt))
+
+    return user.id, key
 
 
 def print_activity(a: Activity):
@@ -110,7 +114,7 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    user_id = authenticate(args.email, args.password)
+    user_id, key = authenticate(args.email, args.password)
 
     db = ActivityDatabase()
 

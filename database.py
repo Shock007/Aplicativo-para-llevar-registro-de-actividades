@@ -9,6 +9,7 @@ antes de tocar este módulo.
 import os
 import os
 import sqlite3
+from crypto import encrypt_str, decrypt_str, DecryptionError
 from datetime import datetime
 from typing import List, Optional
 from contextlib import contextmanager
@@ -43,7 +44,28 @@ CREATE TABLE IF NOT EXISTS users (
 );
 """
 
+def _encrypt_field(value, is_public, key):
+    if value is None or is_public or not key:
+        return value
+    return encrypt_str(key, value)
 
+
+def _decrypt_field(value, is_public, key):
+    if value is None or is_public or not key:
+        return value
+    try:
+        return decrypt_str(key, value)
+    except DecryptionError:
+        return value  # dato legado (pre-Fase 2) o cifrado con otra clave: se deja tal cual
+
+
+def _decrypt_activity_row(row: tuple, key: bytes) -> tuple:
+    row = list(row)
+    is_public = bool(row[10])
+    row[1] = _decrypt_field(row[1], is_public, key)   # title
+    row[2] = _decrypt_field(row[2], is_public, key)   # description
+    return tuple(row)
+    
 class ActivityDatabase:
     def __init__(self, db_path=DB_PATH):
         self.db_path = str(db_path)
@@ -78,17 +100,19 @@ class ActivityDatabase:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_user ON activities(user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activities_public ON activities(is_public)")
 
-    def add(self, activity: Activity, user_id: int) -> Activity:
+    def add(self, activity: Activity, user_id: int, key: bytes) -> Activity:
         now = datetime.now().isoformat(timespec="seconds")
+        title_db = _encrypt_field(activity.title, activity.is_public, key)
+        desc_db = _encrypt_field(activity.description, activity.is_public, key)
         with self._connect() as conn:
             cur = conn.execute(
                 """INSERT INTO activities
-                   (title, description, category, activity_date, duration_minutes,
-                    attachment_path, created_at, updated_at, user_id, is_public)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (activity.title, activity.description, activity.category,
-                 activity.activity_date, activity.duration_minutes,
-                 activity.attachment_path, now, now, user_id, int(activity.is_public)),
+               (title, description, category, activity_date, duration_minutes,
+                attachment_path, created_at, updated_at, user_id, is_public)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (title_db, desc_db, activity.category,
+             activity.activity_date, activity.duration_minutes,
+             activity.attachment_path, now, now, user_id, int(activity.is_public)),
             )
             activity.id = cur.lastrowid
             activity.created_at = now
@@ -96,16 +120,16 @@ class ActivityDatabase:
             activity.user_id = user_id
         return activity
 
-    def get(self, activity_id: int, user_id: int) -> Optional[Activity]:
+    def get(self, activity_id: int, user_id: int, key: bytes = None) -> Optional[Activity]:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM activities WHERE id = ? AND user_id = ?",
                 (activity_id, user_id),
             ).fetchone()
-        return Activity.from_row(row) if row else None
+        return Activity.from_row(_decrypt_activity_row(row, key)) if row else None
 
-    def list(self, user_id: int, category: Optional[str] = None,
-              activity_date: Optional[str] = None) -> List[Activity]:
+    def list(self, user_id: int, key: bytes = None, category: Optional[str] = None,
+          activity_date: Optional[str] = None) -> List[Activity]:
         query = "SELECT * FROM activities WHERE user_id = ?"
         params = [user_id]
         if category:
@@ -114,26 +138,24 @@ class ActivityDatabase:
         if activity_date:
             query += " AND activity_date = ?"
             params.append(activity_date)
-        query += " ORDER BY activity_date DESC, id DESC"
-
+            query += " ORDER BY activity_date DESC, id DESC"
         with self._connect() as conn:
-            rows = conn.execute(query, params).fetchall()
-        return [Activity.from_row(r) for r in rows]
+                rows = conn.execute(query, params).fetchall()
+        return [Activity.from_row(_decrypt_activity_row(r, key)) for r in rows]
 
-    def update(self, activity_id: int, user_id: int, **fields) -> Optional[Activity]:
-        current = self.get(activity_id, user_id)
+    def update(self, activity_id: int, user_id: int, key: bytes = None, **fields) -> Optional[Activity]:
+        current = self.get(activity_id, user_id, key)
         if not current:
             return None
 
         allowed = {"title", "description", "category", "activity_date",
-                   "duration_minutes", "attachment_path", "is_public"}
+               "duration_minutes", "attachment_path", "is_public"}
         updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
         if not updates:
             return current
 
         merged = current.to_dict()
         merged.update(updates)
-        # Revalida los datos combinados antes de escribir
         Activity(
             title=merged["title"],
             description=merged["description"],
@@ -142,6 +164,13 @@ class ActivityDatabase:
             duration_minutes=merged["duration_minutes"],
         )
 
+        final_is_public = bool(merged["is_public"])
+        # Solo se re-cifra si el texto cambió o si la visibilidad cambió
+        # # (el estado público/privado determina si va cifrado o no).
+        if "title" in updates or "is_public" in updates:
+            updates["title"] = _encrypt_field(merged["title"], final_is_public, key)
+        if "description" in updates or "is_public" in updates:
+            updates["description"] = _encrypt_field(merged["description"], final_is_public, key)
         if "is_public" in updates:
             updates["is_public"] = int(updates["is_public"])
 
@@ -152,7 +181,7 @@ class ActivityDatabase:
                 f"UPDATE activities SET {set_clause}, updated_at = ? WHERE id = ? AND user_id = ?",
                 (*updates.values(), now, activity_id, user_id),
             )
-        return self.get(activity_id, user_id)
+        return self.get(activity_id, user_id, key)
 
     def list_public(self) -> List[dict]:
         """Actividades marcadas como públicas por cualquier usuario, con el

@@ -46,3 +46,17 @@ def decrypt_str(key: bytes, texto_cifrado: str) -> str:
             "No se pudo descifrar el contenido: clave incorrecta o dato corrupto."
         ) from exc
     return data.decode("utf-8")
+
+def encrypt_bytes(key: bytes, data: bytes) -> bytes:
+    f = Fernet(key)
+    return f.encrypt(data)
+
+
+def decrypt_bytes(key: bytes, token: bytes) -> bytes:
+    f = Fernet(key)
+    try:
+        return f.decrypt(token)
+    except InvalidToken as exc:
+        raise DecryptionError(
+            "No se pudo descifrar el archivo: clave incorrecta o dato corrupto."
+        ) from exc
