@@ -115,29 +115,37 @@ def main():
     args = parser.parse_args()
 
     user_id, key = authenticate(args.email, args.password)
-
     db = ActivityDatabase()
 
     try:
         if args.command == "add":
-            kwargs = {"title": args.title, "description": args.description,
-                      "category": args.category, "duration_minutes": args.duration_minutes}
+            kwargs = {
+                "title": args.title,
+                "description": args.description,
+                "category": args.category,
+                "duration_minutes": args.duration_minutes,
+            }
             if args.activity_date:
                 kwargs["activity_date"] = args.activity_date
+
             activity = Activity(**kwargs)
-            saved = db.add(activity, user_id=user_id)
+            saved = db.add(activity, user_id=user_id, key=key)
             print(f"Actividad registrada con id {saved.id}.")
 
         elif args.command == "list":
-            activities = db.list(user_id=user_id, category=args.category,
-                                  activity_date=args.activity_date)
+            activities = db.list(
+                user_id=user_id,
+                key=key,
+                category=args.category,
+                activity_date=args.activity_date,
+            )
             if not activities:
                 print("No hay actividades registradas.")
             for a in activities:
                 print(f"[{a.id}] {a.activity_date} | {a.category or '-':<12} | {a.title}")
 
         elif args.command == "show":
-            activity = db.get(args.id, user_id=user_id)
+            activity = db.get(args.id, user_id=user_id, key=key)
             if not activity:
                 print(f"No existe una actividad con id {args.id}.", file=sys.stderr)
                 sys.exit(1)
@@ -147,6 +155,7 @@ def main():
             updated = db.update(
                 args.id,
                 user_id=user_id,
+                key=key,
                 title=args.title,
                 description=args.description,
                 category=args.category,
