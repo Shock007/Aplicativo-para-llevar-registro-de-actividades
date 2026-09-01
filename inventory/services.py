@@ -1,0 +1,1 @@
+# Lógica de validación de clave corporativa y permisos

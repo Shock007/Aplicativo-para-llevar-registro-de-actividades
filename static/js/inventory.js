@@ -1,0 +1,1 @@
+// NUEVO: Peticiones e interacción de inventario

@@ -1,0 +1,1 @@
+# Conector a la DB externa de la empresa (SQLAlchemy/Psycopg2)
