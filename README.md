@@ -10,18 +10,46 @@ el modelo de datos sólidos antes de añadir seguridad y sincronización.
 
 ```
 activity_tracker/
-├── main.py          # CLI (punto de entrada)
-├── app.py            # Interfaz web Flask (punto de entrada)
-├── models.py         # Modelo de datos Activity + validaciones
-├── database.py        # Acceso a SQLite (CRUD)
-├── config.py          # Rutas y variables de entorno
-├── templates/          # HTML (Jinja2)
-├── static/              # CSS y JS de la interfaz web
-├── uploads/              # Adjuntos subidos (ignorada por git)
-├── requirements.txt
-├── .env.example
-├── .gitignore
-└── data/               # DB local (ignorada por git)
+│
+├── data/                       # Almacenamiento local (SQLite)
+│   └── activities.db           # DB local original (Logs/Datos sensibles)
+│
+├── uploads/                    # Archivos adjuntos cifrados (.png, .pdf, etc.)
+│
+├── templates/                  # PLANTILLAS HTML
+│   ├── login.html              # Autenticación original
+│   ├── register.html           # Registro original
+│   ├── index.html              # Dashboard original de Actividades/Logs
+│   └── inventory/              # NUEVO: Vistas del módulo de inventario
+│       ├── list.html           # Catálogo y estados de productos
+│       └── edit.html           # Formulario con validación de clave/permisos
+│
+├── static/                     # RECURSOS ESTÁTICOS
+│   ├── css/
+│   │   ├── auth.css
+│   │   ├── styles.css
+│   │   └── inventory.css       # NUEVO: Estilos para el módulo de inventario
+│   └── js/
+│       ├── app.js
+│       └── inventory.js        # NUEVO: Peticiones e interacción de inventario
+│
+├── inventory/                  # NUEVO MÓDULO (Aislado de la lógica de actividades)
+│   ├── __init__.py
+│   ├── db_connector.py         # Conector a la DB externa de la empresa (SQLAlchemy/Psycopg2)
+│   ├── models.py               # Modelos de lectura (Catálogo) y edición (Cantidad/Estado)
+│   └── services.py             # Lógica de validación de clave corporativa y permisos
+│
+├── auth.py                     # Autenticación local original (hash, sesiones, Fernet key)
+├── config.py                   # Configuración global (se agregan credenciales de la DB externa)
+├── crypto.py                   # Motor original de cifrado AES-256 / PBKDF2
+├── database.py                 # Capa CRUD local original (ActivityDatabase / UserDatabase)
+├── models.py                   # Dataclasses originales (Activity / User)
+├── main.py                     # CLI original del rastreador de actividades
+├── app.py                      # Servidor Flask (se registran las nuevas rutas del inventario)
+├── migrate_encrypt.py          # Script de migración existente
+├── requirements.txt            # Se agregan conectores de BD (ej. SQLAlchemy, psycopg2/PyMySQL)
+└── test/
+    └── test_integrity.py       # Pruebas existentes
 ```
 
 ## Uso — CLI
